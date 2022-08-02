@@ -8,11 +8,12 @@ use parking_lot::RwLock;
 
 use std::env::current_dir;
 use std::fs::{create_dir, File};
-use std::io::{BufReader, BufWriter};
+use std::io::{BufWriter, Cursor, Seek, SeekFrom, Write};
 
 use std::path::PathBuf;
 
 use crate::parsers::warframestat::WarframeStat;
+use crate::Resources;
 use filetime::FileTime;
 use rodio::{Decoder, OutputStream, Source};
 use std::sync::mpsc::{Receiver, Sender};
@@ -244,7 +245,7 @@ impl VoidRat {
                                     .iter()
                                     .any(|n| n.timestamp == fissure.activation.timestamp())
                                 {
-                                    notify();
+                                    play_notification_sound();
 
                                     storage
                                         .notified
@@ -261,7 +262,7 @@ impl VoidRat {
                                     .iter()
                                     .any(|n| n.timestamp == invasion.activation.timestamp())
                                 {
-                                    notify();
+                                    play_notification_sound();
 
                                     storage
                                         .notified
@@ -519,13 +520,19 @@ impl ToString for Reward {
     }
 }
 
-fn notify() {
+pub fn play_notification_sound() {
     // Get a output stream handle to the default physical sound device
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     // Load a sound from a file, using a path relative to Cargo.toml
-    let file = BufReader::new(File::open("resources/audio/notification.wav").unwrap());
+
+    // "In memory file"
+    let mut c = Cursor::new(Vec::new());
+    c.write_all(&Resources::get("audio/notification.wav").unwrap().data)
+        .unwrap();
+    c.seek(SeekFrom::Start(0)).unwrap();
+
     // Decode that sound file into a source
-    let source = Decoder::new(file).unwrap();
+    let source = Decoder::new(c).unwrap();
     // Play the sound directly on the device
     stream_handle
         .play_raw(source.convert_samples())

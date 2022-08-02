@@ -8,7 +8,7 @@ env:
 
 jobs:
   quality:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
@@ -23,6 +23,9 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
           override: true
+
+      - name: Update packages
+        run: sudo apt-get update; sudo apt-get install libasound2-dev -y
 
       - name: Run fmt
         run: cargo fmt --all -- --check

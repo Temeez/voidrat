@@ -11,6 +11,7 @@ use eframe::egui::{
 };
 use egui_extras::{RetainedImage, Size, TableBuilder};
 
+use crate::voidrat::play_notification_sound;
 use chrono::Local;
 use eframe::CreationContext;
 use parking_lot::RwLock;
@@ -496,6 +497,10 @@ impl UI {
                     &mut self.noti_invasion_epic,
                     "Invasion epic reward (Forma / Orokin x) spotted",
                 );
+                ui.add_space(8.0);
+                if ui.button("▶ Test").clicked() {
+                    thread::spawn(play_notification_sound);
+                }
                 ui.with_layout(
                     Layout::from_main_dir_and_cross_align(Direction::RightToLeft, Align::RIGHT),
                     |ui| {

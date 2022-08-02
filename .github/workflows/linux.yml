@@ -30,7 +30,7 @@ jobs:
             linux-${{github.ref}}-${{github.sha}}
 
       - name: Update packages
-        run: sudo apt-get update;
+        run: sudo apt-get update; sudo apt-get install libasound2-dev -y
 
       - name: Build Release
         run: cargo build --release --bin voidrat
