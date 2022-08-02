@@ -6,18 +6,25 @@ on:
       - '*'
 
 jobs:
-  build:
+  build-linux:
     name: Publish binaries
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            artifact_name: voidrat
-            asset_name: voidrat-linux-amd64
-          - os: windows-latest
-            artifact_name: voidrat.exe
-            asset_name: voidrat-windows-amd64.exe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: sudo apt-get update; sudo apt-get install libasound2-dev -y; cargo build --release
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/release/voidrat
+          asset_name: voidrat-linux-amd64
+          tag: ${{ github.ref }}
+          overwrite: true
+
+  build-windows:
+    name: Publish binaries
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
       - name: Build
@@ -26,7 +33,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.asset_name }}
+          file: target/release/voidrat.exe
+          asset_name: voidrat-windows-amd64.exe
           tag: ${{ github.ref }}
           overwrite: true
