@@ -1,5 +1,5 @@
 use crate::parsers::world_state::WorldState;
-use crate::parsers::{CetusCycle, Fissure, TennoParser};
+use crate::parsers::{CetusCycle, Fissure, Invasion, Reward, TennoParser};
 
 use bincode::{config, decode_from_std_read, encode_into_std_write};
 use chrono::{DateTime, Duration, Local, Utc};
@@ -8,12 +8,13 @@ use parking_lot::RwLock;
 
 use std::env::current_dir;
 use std::fs::{create_dir, File};
-use std::io::BufWriter;
+use std::io::{BufReader, BufWriter};
 
 use std::path::PathBuf;
 
 use crate::parsers::warframestat::WarframeStat;
 use filetime::FileTime;
+use rodio::{Decoder, OutputStream, Source};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc};
 use std::thread::JoinHandle;
@@ -24,6 +25,17 @@ const DATA_PATH: &str = "data";
 const WORLD_STATE_DATA_PATH: &str = "world_state.json";
 const WORLD_STATE_URL: &str = "https://content.warframe.com/dynamic/worldState.php";
 
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+pub struct Notification {
+    pub timestamp: i64,
+}
+
+impl Notification {
+    pub fn new(timestamp: i64) -> Self {
+        Notification { timestamp }
+    }
+}
+
 /// Persistently keeps track when the data was last updated.
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct Storage {
@@ -31,6 +43,11 @@ pub struct Storage {
     pub update_cooldown: i64,
     /// When the last fetch happened in seconds.
     pub last_update: i64,
+
+    pub notified: Vec<Notification>,
+
+    pub noti_fissure_void_capture: bool,
+    pub noti_invasion_epic: bool,
 }
 
 impl Default for Storage {
@@ -38,6 +55,9 @@ impl Default for Storage {
         Self {
             update_cooldown: 300,
             last_update: 0,
+            notified: vec![],
+            noti_fissure_void_capture: false,
+            noti_invasion_epic: false,
         }
     }
 }
@@ -75,6 +95,8 @@ impl Storage {
         let f = File::create(&file_path).expect("Cannot create file!");
         let mut writer = BufWriter::new(f);
 
+        debug!("Writing to file..");
+
         encode_into_std_write(self, &mut writer, config::standard())
     }
 
@@ -86,6 +108,13 @@ impl Storage {
     /// Next update can happen in this many seconds. Debug use.
     pub fn next_update(&self) -> i64 {
         (self.last_update + self.update_cooldown) - Local::now().timestamp()
+    }
+
+    pub fn save_notification(&mut self, a: bool, b: bool) {
+        self.noti_fissure_void_capture = a;
+        self.noti_invasion_epic = b;
+
+        self.write_to_file().expect("Cannot write to storage file.");
     }
 }
 
@@ -106,6 +135,8 @@ pub struct TennoData {
     pub fissures: Vec<Fissure>,
     /// Cetus cycle data.
     pub cetus_cycle: CetusCycle,
+    /// Invasions
+    pub invasions: Vec<Invasion>,
 
     pub storage: Storage,
 }
@@ -116,8 +147,34 @@ impl Default for TennoData {
             initialized: false,
             fissures: vec![],
             cetus_cycle: Default::default(),
+            invasions: vec![],
             storage: Storage::from_file(STORAGE_FILE),
         }
+    }
+}
+
+impl TennoData {
+    /// Returns true if any of the invasion rewards contain
+    /// a forma, orokin reactor or orokin catalyst.
+    pub fn has_epic_invasion(&self) -> Option<Invasion> {
+        self.invasions
+            .iter()
+            .find(|i| {
+                ["forma", "reactor", "catalyst"]
+                    .iter()
+                    .any(|w| i.rewards.all_rewards_string().to_lowercase().contains(w))
+            })
+            .map(|i| i.to_owned())
+    }
+
+    /// Returns true if one of the active fissures is in the Void with Capture map.
+    pub fn has_void_capture(&self) -> Option<Fissure> {
+        self.fissures
+            .iter()
+            .find(|f| {
+                !f.is_storm && (f.node.value == "Hepit (Void)" || f.node.value == "Ukko (Void)")
+            })
+            .map(|f| f.to_owned())
     }
 }
 
@@ -170,9 +227,58 @@ impl VoidRat {
                         data.write()
                             .storage
                             .write_to_file()
-                            .expect("Cannot write to storage file!");
+                            .expect("Cannot write to storage file.");
                         // Set `updating` false since everything is done.
                         updating = false;
+
+                        //
+                        // Play notification if maybe perhaps
+                        //
+                        let mut new_noti = false;
+                        let mut storage = data.read().storage.clone();
+                        let old_notis = data.read().storage.notified.clone();
+                        // Fissure notifications
+                        if storage.noti_fissure_void_capture {
+                            if let Some(fissure) = data.read().has_void_capture() {
+                                if !old_notis
+                                    .iter()
+                                    .any(|n| n.timestamp == fissure.activation.timestamp())
+                                {
+                                    notify();
+
+                                    storage
+                                        .notified
+                                        .push(Notification::new(fissure.activation.timestamp()));
+
+                                    new_noti = true;
+                                }
+                            }
+                        }
+                        // Invasion notifications
+                        if storage.noti_invasion_epic {
+                            if let Some(invasion) = data.read().has_epic_invasion() {
+                                if !old_notis
+                                    .iter()
+                                    .any(|n| n.timestamp == invasion.activation.timestamp())
+                                {
+                                    notify();
+
+                                    storage
+                                        .notified
+                                        .push(Notification::new(invasion.activation.timestamp()));
+
+                                    new_noti = true;
+                                }
+                            }
+                        }
+
+                        if new_noti {
+                            data.write().storage = storage;
+                            data.write()
+                                .storage
+                                .write_to_file()
+                                .expect("Cannot write to storage file.");
+                        }
 
                         debug!("Updated!");
                     }
@@ -186,11 +292,16 @@ impl VoidRat {
                 let world_state_file = &data_path.join(WORLD_STATE_DATA_PATH);
                 let fissure_file = &data_path.join("fissure.json");
                 let cetus_file = &data_path.join("cetus.json");
+                let invasion_file = &data_path.join("invasion.json");
 
+                // Create the data directory if it does not exist.
                 if !data_path.exists() {
                     create_dir(&data_path).expect("Cannot create the data directory.");
                 }
 
+                // If world state date file is missing,
+                // then get the data from url and
+                // create the file with the new data.
                 if !world_state_file.exists() {
                     if let Some(world_data) = fetch_json_data(WORLD_STATE_URL) {
                         fs::write(&world_state_file, world_data)
@@ -200,27 +311,35 @@ impl VoidRat {
                     }
                 }
 
+                // Load data from local files if they exist and they are newer
+                // than the world state data file.
+                // Otherwise get data from world state data file.
                 if fissure_file.exists()
                     && cetus_file.exists()
+                    && invasion_file.exists()
                     && FileTime::from_last_modification_time(&fs::metadata(fissure_file).unwrap())
                         > FileTime::from_last_modification_time(
                             &fs::metadata(world_state_file).unwrap(),
                         )
                 {
                     let p = WarframeStat {};
+                    // Fissure data
                     let fissure_data = fs::read_to_string(fissure_file)
                         .expect("Something went wrong reading the file.");
-                    let f = p.parse_fissures(&fissure_data);
-                    data.write().fissures = f;
-
+                    data.write().fissures = p.parse_fissures(&fissure_data);
+                    // Cetus cycle data
                     let cetus_data = fs::read_to_string(cetus_file)
                         .expect("Something went wrong reading the file.");
-                    let c = p.parse_cetus_cycle(&cetus_data);
-                    data.write().cetus_cycle = c;
+                    data.write().cetus_cycle = p.parse_cetus_cycle(&cetus_data);
+                    // Invasion data
+                    let invasion_data = fs::read_to_string(invasion_file)
+                        .expect("Something went wrong reading the file.");
+                    data.write().invasions = p.parse_invasions(&invasion_data);
 
                     tx.send(Message::Initialized)
                         .expect("Cannot send initialized msg!");
                 } else {
+                    // Load data from the world state file, that definitely exists.
                     let p = WorldState {};
 
                     let world_state_data =
@@ -231,6 +350,7 @@ impl VoidRat {
 
                     data.write().fissures = p.parse_fissures(&world_state_data);
                     data.write().cetus_cycle = p.parse_cetus_cycle(&world_state_data);
+                    data.write().invasions = p.parse_invasions(&world_state_data);
 
                     tx.send(Message::Initialized)
                         .expect("Cannot send initialized msg!");
@@ -242,28 +362,36 @@ impl VoidRat {
             debug!("Next update in: {:?}", data.read().storage.next_update());
 
             if data.read().storage.can_update() && !updating {
+                // Started updating, let us not do this every tick, heh.
                 updating = true;
 
                 debug!("Updating..");
 
                 let tx_clone = tx.clone();
                 let data_clone = data.clone();
+                //
+                // New thread
+                //
                 thread::spawn(move || {
+                    // Parse data from world state data, fresh from the oven (net).
                     let parser = WorldState {};
 
                     if let Some(json) = fetch_json_data(WORLD_STATE_URL) {
                         let file_path = PathBuf::from(DATA_PATH).join("world_state.json");
+                        // Got cool json data so put it in the local file for easy re-use.
                         fs::write(&file_path, json.clone()).expect("Cannot write to file.");
 
                         data_clone.write().fissures = parser.parse_fissures(&json);
                         data_clone.write().cetus_cycle = parser.parse_cetus_cycle(&json);
+                        data_clone.write().invasions = parser.parse_invasions(&json);
 
                         tx_clone
                             .send(Message::Updated)
                             .expect("Cannot send updated msg!");
                     } else {
-                        warn!("Failed to fetch json data from primary source, using fallback instead.");
                         // Since worldState failed for some reason try to use warframestat as a fallback.
+                        warn!("Failed to fetch json data from primary source, using fallback instead.");
+
                         let fallback = WarframeStat {};
 
                         if let Some(json) =
@@ -272,9 +400,7 @@ impl VoidRat {
                             let file_path = PathBuf::from(DATA_PATH).join("fissure.json");
                             fs::write(&file_path, json.clone()).expect("Cannot write to file.");
 
-                            let f = fallback.parse_fissures(&json);
-
-                            data_clone.write().fissures = f;
+                            data_clone.write().fissures = fallback.parse_fissures(&json);
 
                             tx_clone
                                 .send(Message::Updated)
@@ -287,9 +413,20 @@ impl VoidRat {
                             let file_path = PathBuf::from(DATA_PATH).join("cetus.json");
                             fs::write(&file_path, json.clone()).expect("Cannot write to file.");
 
-                            let c = fallback.parse_cetus_cycle(&json);
+                            data_clone.write().cetus_cycle = fallback.parse_cetus_cycle(&json);
 
-                            data_clone.write().cetus_cycle = c;
+                            tx_clone
+                                .send(Message::Updated)
+                                .expect("Cannot send updated msg!");
+                        }
+
+                        if let Some(json) =
+                            fetch_json_data("https://api.warframestat.us/pc/invasions")
+                        {
+                            let file_path = PathBuf::from(DATA_PATH).join("invasion.json");
+                            fs::write(&file_path, json.clone()).expect("Cannot write to file.");
+
+                            data_clone.write().invasions = fallback.parse_invasions(&json);
 
                             tx_clone
                                 .send(Message::Updated)
@@ -362,4 +499,40 @@ impl CetusCycle {
             total_time_left
         }
     }
+}
+
+impl Invasion {
+    pub fn active_duration(&self) -> Duration {
+        let now = Utc::now();
+
+        now - self.activation
+    }
+}
+
+impl ToString for Reward {
+    fn to_string(&self) -> String {
+        if self.quantity > 1 {
+            return format!("{} {}", self.quantity, self.item);
+        }
+
+        self.item.clone()
+    }
+}
+
+fn notify() {
+    // Get a output stream handle to the default physical sound device
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    // Load a sound from a file, using a path relative to Cargo.toml
+    let file = BufReader::new(File::open("resources/audio/notification.wav").unwrap());
+    // Decode that sound file into a source
+    let source = Decoder::new(file).unwrap();
+    // Play the sound directly on the device
+    stream_handle
+        .play_raw(source.convert_samples())
+        .expect("Error playing notification.wav!");
+
+    // The sound plays in a separate audio thread,
+    // so we need to keep the main thread alive while it's playing.
+    // Audio file has a duration of second or less.
+    thread::sleep(std::time::Duration::from_secs(1));
 }

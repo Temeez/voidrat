@@ -1,7 +1,11 @@
 /// Parsers for the worldState.php
 ///
-use crate::parsers::{CetusCycle, Fissure, FissureTier, TennoParser};
+use crate::parsers::{
+    CetusCycle, Fissure, FissureTier, Invasion, InvasionReward, Reward, TennoParser,
+};
+use crate::util::split_pascal_case;
 use chrono::{DateTime, Utc};
+use phf::phf_map;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use serde_with::formats::Flexible;
@@ -10,6 +14,66 @@ use serde_with::{serde_as, TimestampMilliSeconds};
 pub struct WorldState {}
 
 impl TennoParser for WorldState {
+    fn parse_invasions(&self, data: &str) -> Vec<Invasion> {
+        let v: Value = serde_json::from_str(data).expect("Bad world state file!");
+
+        let mut _invasions: Vec<_Invasion> =
+            serde_json::from_str(&v["Invasions"].to_string()).expect("Deserialize error!");
+
+        let invasions = _invasions
+            .iter_mut()
+            .filter(|i| !i.completed)
+            .map(|i| Invasion {
+                activation: i.activation,
+                rewards: InvasionReward {
+                    attacker: i
+                        .attacker_reward
+                        .iter()
+                        .map(|r| Reward {
+                            item: ITEM_TYPES
+                                .get(&r.item_type)
+                                .unwrap_or(
+                                    &split_pascal_case(
+                                        r.item_type
+                                            .split('/')
+                                            .collect::<Vec<&str>>()
+                                            .last()
+                                            .unwrap(),
+                                    )
+                                    .as_str(),
+                                )
+                                .to_string(),
+                            quantity: r.item_count,
+                        })
+                        .collect::<Vec<Reward>>(),
+                    defender: i
+                        .defender_reward
+                        .iter()
+                        .map(|r| Reward {
+                            item: ITEM_TYPES
+                                .get(&r.item_type)
+                                .unwrap_or(
+                                    &split_pascal_case(
+                                        r.item_type
+                                            .split('/')
+                                            .collect::<Vec<&str>>()
+                                            .last()
+                                            .unwrap(),
+                                    )
+                                    .as_str(),
+                                )
+                                .to_string(),
+                            quantity: r.item_count,
+                        })
+                        .collect::<Vec<Reward>>(),
+                },
+                node: self.get_solar_node_by_key(&i.node),
+            })
+            .collect::<Vec<Invasion>>();
+
+        invasions
+    }
+
     /// Parse active fissures from the world data.
     /// Takes the full world state data.
     fn parse_fissures(&self, data: &str) -> Vec<Fissure> {
@@ -23,6 +87,7 @@ impl TennoParser for WorldState {
         let mut fissures = _fissures
             .iter()
             .map(|f| Fissure {
+                activation: f.activation,
                 expiry: f.expiry,
                 node: self.get_solar_node_by_key(&f.node),
                 mission: f.mission_type.clone().unwrap().to_string(),
@@ -34,6 +99,7 @@ impl TennoParser for WorldState {
         let mut storms = _storms
             .iter()
             .map(|f| Fissure {
+                activation: f.activation,
                 expiry: f.expiry,
                 node: self.get_solar_node_by_key(&f.node),
                 mission: self
@@ -162,6 +228,7 @@ struct _Fissure {
     pub mission_type: Option<MissionType>,
     pub node: String,
     pub modifier: FissureModifier,
+    pub activation: DateTime<Utc>,
     pub expiry: DateTime<Utc>,
 }
 
@@ -178,6 +245,7 @@ impl<'de> Deserialize<'de> for _Fissure {
             node: String,
             #[serde(alias = "ActiveMissionTier")]
             modifier: FissureModifier,
+            activation: Inner,
             expiry: Inner,
         }
 
@@ -200,6 +268,7 @@ impl<'de> Deserialize<'de> for _Fissure {
             region: helper.region,
             node: helper.node,
             mission_type: helper.mission_type,
+            activation: helper.activation.date.datetime,
             expiry: helper.expiry.date.datetime,
             modifier: helper.modifier,
         })
@@ -260,6 +329,107 @@ impl<'de> Deserialize<'de> for _SyndicateMission {
             jobs: helper.jobs,
             activation: helper.activation.date.datetime,
             expiry: helper.expiry.date.datetime,
+        })
+    }
+}
+
+pub static ITEM_TYPES: phf::Map<&'static str, &'static str> = phf_map! {
+    "/Lotus/Types/Items/MiscItems/InfestedAladCoordinate" => "Infested Alad V Nav Coordinate",
+    "/Lotus/Types/Items/Research/ChemComponent" => "Detonite Injector",
+    "/Lotus/Types/Items/Research/BioComponent" => "Mutagen Mass",
+    "/Lotus/Types/Items/Research/EnergyComponent" => "Fieldron",
+    "/Lotus/Types/Recipes/Weapons/SnipetronVandalBlueprint" => "Snipetron Vandal Blueprint",
+    "/Lotus/Types/Recipes/Weapons/DeraVandalBlueprint" => "Dera Vandal Blueprint",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/TwinVipersWraithReceiver" => "Twin Viper Wraith Receiver",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/DeraVandalReceiver" => "Dera Vandal Receiver",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/GrineerCombatKnifeHilt" => "Sheev Hilt",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/GrineerCombatKnifeBlade" => "Sheev Blade",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/SnipetronVandalStock" => "Snipetron Vandal Stock",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/LatronWraithBarrel" => "Latron Wraith Barrel",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/KarakWraithReceiver" => "Karak Wraith Receiver",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/DeraVandalBarrel" => "Dera Vandal Barrel",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/TwinVipersWraithBarrel" => "Twin Viper Wraith Barrel",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/StrunWraithBarrel" => "Strun Wraith Barrel",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/StrunWraithReceiver" => "Strun Wraith Receiver",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/DeraVandalStock" => "Dera Vandal Stock",
+};
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct _InvasionReward {
+    item_type: String,
+    item_count: u32,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct _Invasion {
+    node: String,
+    activation: DateTime<Utc>,
+    attacker_reward: Vec<_InvasionReward>,
+    defender_reward: Vec<_InvasionReward>,
+    completed: bool,
+}
+
+impl<'de> Deserialize<'de> for _Invasion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize, Debug)]
+        #[serde(rename_all = "PascalCase")]
+        #[serde_with::serde_as]
+        struct Outer {
+            node: String,
+            activation: Inner,
+            attacker_reward: Value,
+            defender_reward: Value,
+            completed: bool,
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct Inner {
+            #[serde(alias = "$date")]
+            date: InnerInner,
+        }
+
+        #[serde_as]
+        #[derive(Deserialize, Debug)]
+        struct InnerInner {
+            #[serde(alias = "$numberLong")]
+            #[serde_as(as = "TimestampMilliSeconds<String, Flexible>")]
+            datetime: DateTime<Utc>,
+        }
+
+        #[derive(Deserialize, Debug, Default)]
+        #[serde_with::serde_as]
+        struct RewardInner {
+            #[serde(alias = "countedItems")]
+            #[serde_as(deserialize_as = "DefaultOnError")]
+            counted_items: Vec<_InvasionReward>,
+        }
+
+        let helper = Outer::deserialize(deserializer)?;
+
+        let ar: RewardInner = if helper.attacker_reward.to_string().contains("[]") {
+            RewardInner::default()
+        } else {
+            serde_json::from_str(&helper.attacker_reward.to_string()).expect("Deserialize error!")
+        };
+
+        let dr: RewardInner = if helper.defender_reward.to_string().contains("Array") {
+            RewardInner::default()
+        } else {
+            serde_json::from_str(&helper.defender_reward.to_string()).expect("Deserialize error!")
+        };
+
+        Ok(_Invasion {
+            node: helper.node,
+            activation: helper.activation.date.datetime,
+            attacker_reward: ar.counted_items,
+            defender_reward: dr.counted_items,
+            completed: helper.completed,
         })
     }
 }

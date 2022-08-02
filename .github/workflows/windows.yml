@@ -12,7 +12,7 @@ jobs:
       matrix:
         toolchain: [stable]
         type: [release]
-    runs-on: ubuntu-22.04
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
 
@@ -29,27 +29,8 @@ jobs:
           restore-keys: |
             windows-${{github.ref}}-${{github.sha}}
 
-      - name: Update packages and install windres
-        run: |
-          sudo apt-get update
-          sudo apt install mingw-w64 binutils-mingw-w64-x86-64 -y
-          sudo ln -s /usr/bin/x86_64-w64-mingw32-windres /usr/bin/windres
-
-      - name: Build release cc
-        run: |
-          # 1.60.0 because of https://github.com/mxre/winres/issues/40
-          rustup install 1.60.0
-          rustup +1.60.0 target add x86_64-pc-windows-gnu
-
-          PKG_CONFIG_ALLOW_CROSS=1 cargo +1.60.0 build --target=x86_64-pc-windows-gnu --bin voidrat --release
-          
-          # Fail if binary doesn't exist
-          if [[ ! -f "target/x86_64-pc-windows-gnu/release/voidrat.exe" ]] ; then
-            exit 1
-          fi
-          
-          # Strip symbols from the binary
-          strip target/x86_64-pc-windows-gnu/release/voidrat.exe
+      - name: Build
+        run: cargo build --release
         env:
           CARGO_INCREMENTAL: 0
           RUSTFLAGS: "-C debuginfo=0 -D warnings"
@@ -59,5 +40,5 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: voidrat-Windows-${{matrix.toolchain}}
-          path: target/x86_64-pc-windows-gnu/release/voidrat.exe
+          path: target/release/voidrat.exe
         if: ${{matrix.type == 'release'}}

@@ -16,11 +16,10 @@ fn main() {
     setup_logging().expect("failed to initialize logging.");
 
     let icon = Resources::get("icons/voidrat.ico").unwrap().data;
-
     let options = NativeOptions {
-        initial_window_size: Some(Vec2::new(425.0, 540.0)),
-        min_window_size: Some(Vec2::new(425.0, 160.0)),
-        max_window_size: Some(Vec2::new(425.0, 2000.0)),
+        initial_window_size: Some(Vec2::new(510.0, 540.0)),
+        min_window_size: Some(Vec2::new(510.0, 160.0)),
+        max_window_size: Some(Vec2::new(510.0, 2000.0)),
         icon_data: Some(IconData {
             rgba: image::load_from_memory(icon.as_ref())
                 .unwrap()

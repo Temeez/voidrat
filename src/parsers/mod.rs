@@ -22,6 +22,8 @@ impl Default for CetusCycle {
 
 #[derive(Debug, Clone)]
 pub struct Fissure {
+    /// Fissure activation time.
+    pub activation: DateTime<Utc>,
     /// Expiry time for the fissure.
     pub expiry: DateTime<Utc>,
     /// Solar node
@@ -72,8 +74,11 @@ impl ToString for FissureTier {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SolarNode {
+    /// Human readable name for the solar node.
     pub value: String,
+    /// Enemy name.
     pub enemy: Option<String>,
+    /// Type for the solar node, e.g: Capture.
     #[serde(alias = "type")]
     pub node_type: Option<String>,
 }
@@ -88,8 +93,48 @@ impl Default for SolarNode {
     }
 }
 
+/// All solar nodes in existence.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SolarNodes(HashMap<String, SolarNode>);
+
+#[derive(Debug, Clone)]
+pub struct InvasionReward {
+    pub attacker: Vec<Reward>,
+    pub defender: Vec<Reward>,
+}
+
+impl InvasionReward {
+    pub fn all_rewards_string(&self) -> String {
+        let a = self
+            .attacker
+            .iter()
+            .map(|r| r.item.clone())
+            .collect::<String>();
+        let d = self
+            .defender
+            .iter()
+            .map(|r| r.item.clone())
+            .collect::<String>();
+
+        format!("{}{}", a, d)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Reward {
+    pub item: String,
+    pub quantity: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct Invasion {
+    /// When invasion started.
+    pub activation: DateTime<Utc>,
+    /// Invasion rewards for attacker and defender.
+    pub rewards: InvasionReward,
+    /// Solar node, where the invasion happens.
+    pub node: SolarNode,
+}
 
 impl SolarNodes {
     fn find_key_for_value<'a>(
@@ -102,8 +147,11 @@ impl SolarNodes {
 }
 
 pub trait TennoParser {
+    /// Returns a list of active `Invasion`s.
+    fn parse_invasions(&self, data: &str) -> Vec<Invasion>;
+    /// Returns a list of active `Fissure`s.
     fn parse_fissures(&self, data: &str) -> Vec<Fissure>;
-
+    /// Returns a `CetusCycle`.
     fn parse_cetus_cycle(&self, data: &str) -> CetusCycle;
     /// Parses solar node data from the local data file.
     fn solar_nodes(&self) -> SolarNodes {

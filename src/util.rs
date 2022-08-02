@@ -1,6 +1,7 @@
 use chrono::Duration;
 use eframe::egui::Color32;
 use egui_extras::RetainedImage;
+use log::warn;
 use rust_embed::RustEmbed;
 
 #[derive(RustEmbed)]
@@ -10,7 +11,10 @@ pub struct Resources;
 /// Returns a `RetainedImage` from the data sourced from a local file.
 pub fn get_retained_image(file_name: &str) -> RetainedImage {
     let resource = Resources::get(&format!("images/{}", file_name))
-        .unwrap()
+        .unwrap_or_else(|| {
+            warn!("Missing image: {}", file_name);
+            Resources::get("images/MissingImg.webp").unwrap()
+        })
         .data;
 
     RetainedImage::from_image_bytes(file_name, resource.as_ref())
@@ -19,7 +23,7 @@ pub fn get_retained_image(file_name: &str) -> RetainedImage {
 
 /// Returns human readable time of `Duration` supplied.
 /// Times are "zero padded".
-pub fn time_left_text(dur: &Duration) -> String {
+pub fn duration_to_string(dur: &Duration) -> String {
     let seconds = dur.num_seconds() % 60;
     let minutes = (dur.num_seconds() / 60) % 60;
     let hours = (dur.num_seconds() / 60) / 60;
@@ -62,4 +66,22 @@ pub fn time_left_color(dur: &Duration) -> (Color32, Color32) {
             Color32::from_rgb(116, 192, 252), // Blue 3
         )
     }
+}
+
+pub fn split_pascal_case(value: &str) -> String {
+    let mut idxs = vec![];
+    let mut copy = value.to_string();
+    // Find the positions of uppercase characters,
+    // excluding the zero position.
+    value.chars().enumerate().for_each(|(i, c)| {
+        if i > 0 && c.is_ascii_uppercase() {
+            idxs.push(i);
+        }
+    });
+    // Add spaces to correct positions.
+    idxs.iter().enumerate().for_each(|(i, k)| {
+        copy.insert(*k + i, ' ');
+    });
+    // Return the finished string.
+    copy
 }
