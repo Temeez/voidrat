@@ -243,7 +243,7 @@ impl UI {
                                         && !invasion.rewards.defender.is_empty()
                                     {
                                         ui.with_layout(
-                                            Layout::centered_and_justified(Direction::TopDown),
+                                            Layout::top_down_justified(Align::Center),
                                             |ui| {
                                                 ui.add_space(30.0);
                                                 ui.separator();

@@ -344,14 +344,19 @@ pub static ITEM_TYPES: phf::Map<&'static str, &'static str> = phf_map! {
     "/Lotus/Types/Recipes/Weapons/WeaponParts/DeraVandalReceiver" => "Dera Vandal Receiver",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/GrineerCombatKnifeHilt" => "Sheev Hilt",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/GrineerCombatKnifeBlade" => "Sheev Blade",
+    "/Lotus/Types/Recipes/Weapons/GrineerCombatKnifeSortieBlueprint" => "Sheev Blueprint",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/SnipetronVandalStock" => "Snipetron Vandal Stock",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/LatronWraithBarrel" => "Latron Wraith Barrel",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/KarakWraithReceiver" => "Karak Wraith Receiver",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/DeraVandalBarrel" => "Dera Vandal Barrel",
-    "/Lotus/Types/Recipes/Weapons/WeaponParts/TwinVipersWraithBarrel" => "Twin Viper Wraith Barrel",
+    "/Lotus/Types/Recipes/Weapons/WeaponParts/TwinVipersWraithBarrel" => "Twin Vipers Wraith Barrel",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/StrunWraithBarrel" => "Strun Wraith Barrel",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/StrunWraithReceiver" => "Strun Wraith Receiver",
     "/Lotus/Types/Recipes/Weapons/WeaponParts/DeraVandalStock" => "Dera Vandal Stock",
+    "/Lotus/Types/Recipes/Components/FormaBlueprint" => "Forma Blueprint",
+    "/Lotus/Types/Recipes/Components/UtilityUnlockerBlueprint" => "Exilus Warframe Adapter Blueprint",
+    "/Lotus/Types/Recipes/Components/OrokinCatalystBlueprint" => "Orokin Catalyst Blueprint",
+    "/Lotus/Types/Recipes/Components/OrokinReactorBlueprint" => "Orokin Reactor Blueprint",
 };
 
 #[allow(dead_code)]
