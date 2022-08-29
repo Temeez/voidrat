@@ -1,6 +1,6 @@
 # Voidrat
 
-Simple app made with rust. Displays a fefw current things in the Warframe game.
+Simple app made with rust. Displays a few current things in the Warframe game.
 
 ## Features
  - Fissures

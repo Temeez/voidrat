@@ -28,13 +28,13 @@ pub fn duration_to_string(dur: &Duration) -> String {
     let minutes = (dur.num_seconds() / 60) % 60;
     let hours = (dur.num_seconds() / 60) / 60;
 
-    return if hours <= 0 && minutes <= 0 {
+    if hours <= 0 && minutes <= 0 {
         format!("{:0>2}s", seconds)
     } else if hours <= 0 {
         format!("{:0>2}m {:0>2}s", minutes, seconds)
     } else {
         format!("{:0>2}h {:0>2}m {:0>2}s", hours, minutes, seconds)
-    };
+    }
 }
 
 /// Return background and border color based on the duration left.
