@@ -93,6 +93,7 @@ impl TennoParser for WorldState {
                 mission: f.mission_type.clone().unwrap().to_string(),
                 tier: FissureTier::from_str(&f.modifier.to_string()),
                 is_storm: false,
+                hard: f.hard,
             })
             .collect::<Vec<Fissure>>();
 
@@ -108,6 +109,7 @@ impl TennoParser for WorldState {
                     .unwrap_or_else(|| "Unknown".to_string()),
                 tier: FissureTier::from_str(&f.modifier.to_string()),
                 is_storm: true,
+                hard: false,
             })
             .collect::<Vec<Fissure>>();
 
@@ -230,6 +232,7 @@ struct _Fissure {
     pub modifier: FissureModifier,
     pub activation: DateTime<Utc>,
     pub expiry: DateTime<Utc>,
+    pub hard: bool,
 }
 
 impl<'de> Deserialize<'de> for _Fissure {
@@ -247,6 +250,8 @@ impl<'de> Deserialize<'de> for _Fissure {
             modifier: FissureModifier,
             activation: Inner,
             expiry: Inner,
+            #[serde(default)]
+            hard: bool,
         }
 
         #[derive(Deserialize)]
@@ -271,6 +276,7 @@ impl<'de> Deserialize<'de> for _Fissure {
             activation: helper.activation.date.datetime,
             expiry: helper.expiry.date.datetime,
             modifier: helper.modifier,
+            hard: helper.hard,
         })
     }
 }

@@ -52,6 +52,7 @@ impl TennoParser for WarframeStat {
                 mission: f.mission_key.clone(),
                 tier: FissureTier::from_str(&f.tier),
                 is_storm: f.is_storm,
+                hard: f.is_hard,
             })
             .collect::<Vec<Fissure>>();
         fissures.sort_by_key(|f| f.tier.clone());
@@ -81,6 +82,7 @@ struct _Fissure {
     mission_key: String,
     tier: String,
     is_storm: bool,
+    is_hard: bool,
 }
 
 #[derive(Deserialize, Debug, Clone)]

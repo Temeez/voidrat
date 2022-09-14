@@ -75,6 +75,7 @@ struct Images {
     neo: RetainedImage,
     axi: RetainedImage,
     requiem: RetainedImage,
+    steel_essence: RetainedImage,
 
     invasion: HashMap<String, RetainedImage>,
 }
@@ -94,6 +95,7 @@ impl Images {
             neo: Self::dummy(),
             axi: Self::dummy(),
             requiem: Self::dummy(),
+            steel_essence: Self::dummy(),
 
             invasion: HashMap::new(),
         }
@@ -167,6 +169,7 @@ impl UI {
             images_clone.write().neo = get_retained_image("VoidProjectionsSilverD.webp");
             images_clone.write().axi = get_retained_image("VoidProjectionsGoldD.webp");
             images_clone.write().requiem = get_retained_image("RequiemR0.webp");
+            images_clone.write().steel_essence = get_retained_image("SteelEssence.webp");
 
             let mut invasion_imgs: HashMap<String, RetainedImage> = HashMap::new();
             for ir in INVASION_REWARDS {
@@ -314,7 +317,8 @@ impl UI {
                 TableBuilder::new(ui)
                     .column(Size::exact(90.0))
                     .column(Size::exact(160.0))
-                    .column(Size::exact(220.0))
+                    .column(Size::exact(124.0))
+                    .column(Size::exact(96.0))
                     .body(|mut body| {
                         ctx.request_repaint();
 
@@ -413,6 +417,20 @@ impl UI {
                                                 Color32::BLACK,
                                                 RichText::new(text)
                                                     .text_style(TextStyle::Monospace),
+                                            );
+                                        });
+                                    }
+                                });
+
+                                // 4th column.
+                                row.col(|ui| {
+                                    let size_modifier = 0.5;
+                                    if fissure.hard {
+                                        ui.horizontal_centered(|ui| {
+                                            ui.image(
+                                                self.images.read().steel_essence.texture_id(ctx),
+                                                self.images.read().steel_essence.size_vec2()
+                                                    * size_modifier,
                                             );
                                         });
                                     }

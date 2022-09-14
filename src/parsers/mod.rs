@@ -34,6 +34,8 @@ pub struct Fissure {
     pub tier: FissureTier,
     /// True if this fissure is a void storm.
     pub is_storm: bool,
+    /// True if this fissure is in steel path.
+    pub hard: bool,
 }
 
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq)]
