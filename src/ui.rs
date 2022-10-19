@@ -6,8 +6,9 @@ use eframe::egui::style::WidgetVisuals;
 use std::collections::HashMap;
 
 use eframe::egui::{
-    Align, CentralPanel, Color32, ColorImage, Context, Direction, Layout, Pos2, RichText, Rounding,
-    ScrollArea, Separator, Stroke, TextStyle, Vec2, Widget, Window,
+    menu, Align, CentralPanel, Color32, ColorImage, Context, Direction, Grid, Layout, Pos2,
+    RichText, Rounding, ScrollArea, Separator, Stroke, TextStyle, TopBottomPanel, Vec2, Widget,
+    Window,
 };
 use egui_extras::{RetainedImage, Size, TableBuilder};
 
@@ -16,7 +17,7 @@ use chrono::Local;
 use eframe::CreationContext;
 use parking_lot::RwLock;
 use std::sync::Arc;
-use std::thread;
+use std::{process, thread};
 
 const LOADING_FRAMES: [&str; 4] = ["Loading", "Loading.", "Loading..", "Loading..."];
 
@@ -136,6 +137,24 @@ const INVASION_REWARDS: [&str; 15] = [
     "Exilus Warframe Adapter Blueprint",
 ];
 
+// TODO: Filter system can probably be neater..
+pub const FISSURE_FILTER_LEN: usize = 13;
+const FISSURE_FILTERS: [&str; FISSURE_FILTER_LEN] = [
+    "Capture",
+    "Extermination",
+    "Mobile Defense",
+    "Rescue",
+    "Sabotage",
+    "Hive",
+    "Spy",
+    "Disruption",
+    "Defense",
+    "Excavation",
+    "Interception",
+    "Survival",
+    "Assault",
+];
+
 pub struct UI {
     /// The actual app where UI get its data from.
     app: VoidRat,
@@ -153,6 +172,8 @@ pub struct UI {
     noti_fissure_void_capture: bool,
     /// For checkbox state
     noti_invasion_epic: bool,
+    /// Show fissure filters.
+    show_filters: bool,
 }
 
 impl UI {
@@ -195,6 +216,7 @@ impl UI {
             show_notifications: false,
             noti_fissure_void_capture: data_clone.storage.noti_fissure_void_capture,
             noti_invasion_epic: data_clone.storage.noti_invasion_epic,
+            show_filters: false,
         }
     }
 
@@ -326,6 +348,13 @@ impl UI {
                             // Skip expired fissures.
                             // Skip storms or normal fissures.
                             if fissure.has_expired() || show_storm != fissure.is_storm {
+                                continue;
+                            }
+
+                            if !show_storm
+                                && !self.app.data.read().storage.fissure_filter
+                                    [str_to_filter_id(&fissure.mission)]
+                            {
                                 continue;
                             }
 
@@ -490,16 +519,45 @@ impl UI {
                 });
             }
         });
+        if self.show_filters {
+            ui.separator();
+            ui.heading("Fissure filters");
+            ui.horizontal(|ui| {
+                // Fissure filter
+                Grid::new("fissure_filter_grid").show(ui, |ui| {
+                    for (i, filter) in FISSURE_FILTERS.iter().enumerate() {
+                        if i % 4 == 0 {
+                            ui.end_row();
+                        }
+                        ui.checkbox(
+                            &mut self.app.data.write().storage.fissure_filter[i],
+                            &filter.to_string(),
+                        );
+                    }
+                });
+
+                ui.add_space(36.0);
+
+                if ui.button("Save").clicked() {
+                    // Hide filters.
+                    self.show_filters = false;
+                    // Save to file.
+                    self.app.data.write().storage.save();
+                }
+            });
+        }
     }
 
     fn render_notification_window(&mut self, ctx: &Context) {
-        Window::new("Notifications")
+        Window::new("Notification")
             .default_width(330.0)
             .min_width(330.0)
             .fixed_pos(Pos2::new(60.0, 100.0))
+            .fixed_size(Vec2::new(330.0, 140.0))
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
+                // Audio notification
                 ui.heading("Play audio notification");
                 ui.add_space(8.0);
                 ui.style_mut()
@@ -519,6 +577,7 @@ impl UI {
                 if ui.button("▶ Test").clicked() {
                     thread::spawn(play_notification_sound);
                 }
+                // Buttons
                 ui.with_layout(
                     Layout::from_main_dir_and_cross_align(Direction::RightToLeft, Align::RIGHT),
                     |ui| {
@@ -536,6 +595,22 @@ impl UI {
                 )
             });
     }
+
+    fn file_menu_button(&mut self, ui: &mut eframe::egui::Ui) {
+        ui.menu_button("File", |ui| {
+            if ui.button("Exit").clicked() {
+                process::exit(0);
+            }
+        });
+        ui.menu_button("Filter", |ui| {
+            if ui
+                .checkbox(&mut self.show_filters, "Toggle filters")
+                .changed()
+            {
+                ui.close_menu();
+            }
+        });
+    }
 }
 
 impl eframe::App for UI {
@@ -551,6 +626,12 @@ impl eframe::App for UI {
 
         // instead of using `self.app.data.read()..` every update, forever.
         if self.initialized {
+            TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+                menu::bar(ui, |ui| {
+                    self.file_menu_button(ui);
+                });
+            });
+
             CentralPanel::default().show(ctx, |ui| {
                 ui.add_space(8.0);
 
@@ -590,13 +671,13 @@ fn ui_style(cc: &CreationContext) {
         bg_fill: Color32::WHITE,
         bg_stroke: Stroke {
             width: 1.0,
-            color: Color32::BLACK,
+            color: Color32::BLACK, // Separator, border color
         },
         rounding: Rounding::none(),
         expansion: 0.0,
         fg_stroke: Stroke {
-            width: 0.0,
-            color: Color32::BLACK,
+            width: 1.0,
+            color: Color32::BLACK, // Text color
         },
     };
 
@@ -607,6 +688,31 @@ fn ui_style(cc: &CreationContext) {
     style.visuals.selection.stroke = Stroke {
         width: 1.0,
         color: Color32::DARK_GREEN,
+    };
+
+    // Button etc. not hovered
+    style.visuals.widgets.inactive = WidgetVisuals {
+        bg_fill: Color32::LIGHT_GRAY,
+        bg_stroke: Stroke {
+            width: 1.0,
+            color: Color32::GRAY,
+        },
+        ..base
+    };
+
+    // Button etc. hover
+    style.visuals.widgets.hovered = WidgetVisuals {
+        bg_fill: Color32::LIGHT_GRAY,
+        bg_stroke: Stroke {
+            width: 1.0,
+            color: Color32::BLACK,
+        },
+        ..base
+    };
+
+    style.visuals.widgets.active = WidgetVisuals {
+        bg_fill: Color32::LIGHT_GREEN,
+        ..base
     };
 
     // Scrollbar bg color.
@@ -626,4 +732,23 @@ fn ui_style(cc: &CreationContext) {
 
     // Save the new styles.
     cc.egui_ctx.set_style(style);
+}
+
+fn str_to_filter_id(filter: &str) -> usize {
+    match filter {
+        "Capture" => 0,
+        "Extermination" => 1,
+        "Mobile Defense" => 2,
+        "Rescue" => 3,
+        "Sabotage" => 4,
+        "Hive" => 5,
+        "Spy" => 6,
+        "Disruption" => 7,
+        "Defense" => 8,
+        "Excavation" => 9,
+        "Interception" => 10,
+        "Survival" => 11,
+        "Assault" => 12,
+        _ => 0,
+    }
 }

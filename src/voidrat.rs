@@ -13,6 +13,7 @@ use std::io::{BufWriter, Cursor, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
 use crate::parsers::warframestat::WarframeStat;
+use crate::ui::FISSURE_FILTER_LEN;
 use crate::Resources;
 use filetime::FileTime;
 use rodio::{Decoder, OutputStream, Source};
@@ -49,6 +50,7 @@ pub struct Storage {
 
     pub noti_fissure_void_capture: bool,
     pub noti_invasion_epic: bool,
+    pub fissure_filter: [bool; FISSURE_FILTER_LEN],
 }
 
 impl Default for Storage {
@@ -59,6 +61,7 @@ impl Default for Storage {
             notified: vec![],
             noti_fissure_void_capture: false,
             noti_invasion_epic: false,
+            fissure_filter: [true; FISSURE_FILTER_LEN],
         }
     }
 }
@@ -83,7 +86,11 @@ impl Storage {
         match File::open(&file_path) {
             Ok(mut f) => match decode_from_std_read(&mut f, config::standard()) {
                 Ok(s) => s,
-                Err(e) => panic!("{}", e),
+                Err(_) => {
+                    // If there was an error loading `Storage` from file then
+                    // use defaults instead.
+                    Self::default()
+                }
             },
             Err(e) => panic!("{}", e),
         }
@@ -115,6 +122,10 @@ impl Storage {
         self.noti_fissure_void_capture = a;
         self.noti_invasion_epic = b;
 
+        self.write_to_file().expect("Cannot write to storage file.");
+    }
+
+    pub fn save(&mut self) {
         self.write_to_file().expect("Cannot write to storage file.");
     }
 }
